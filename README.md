@@ -1,6 +1,6 @@
 # pathgate
 
-**Status: v0.1 built and locally verified (2026-10-25). Not published — public push and PyPI release remain owner-gated.**
+**Status: v0.1 built and verified (2026-10-25). Source published on GitHub; PyPI release remains owner-gated.**
 
 Audit git refs and history for Windows-hostile paths — without checking out a single file.
 
@@ -11,7 +11,7 @@ Windows rejects certain path characters (`: * ? " < > |`), trailing dots/spaces,
 Requires Python 3.10+ and `git` on `PATH`. The only runtime dependency is PyYAML 6.0.2.
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/maxico714/pathgate.git
 cd pathgate
 python -m venv .venv
 ```
