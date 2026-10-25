@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import io
+import sys
 import tempfile
 from pathlib import Path
 
+import pytest
+
+import pathgate.cli as cli
 from pathgate.cli import main
+from pathgate.refs import GitError
 from tests.githelpers import commit_files, init_repo
 
 
@@ -104,3 +110,69 @@ def test_history_mode_with_findings() -> None:
         commit_files(repo, {"README.md": "test"}, "initial")
         commit_files(repo, {"CON": "bad"}, "add reserved")
         assert main(["--repo", str(repo), "scan", "--history"]) == 1
+
+
+def test_ref_read_failure_exits_incomplete(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    init_repo(repo)
+    commit_files(repo, {"README.md": "ok"}, "initial")
+
+    def boom(*args: object, **kwargs: object) -> None:
+        raise GitError(["ls-tree"], 128, "simulated failure")
+
+    monkeypatch.setattr(cli, "ls_tree_recursive_full", boom)
+    assert main(["--repo", str(repo), "scan"]) == 4
+
+
+def test_ref_listing_failure_exits_incomplete(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    init_repo(repo)
+    commit_files(repo, {"README.md": "ok"}, "initial")
+
+    def boom(*args: object, **kwargs: object) -> None:
+        raise GitError(["for-each-ref"], 128, "simulated failure")
+
+    monkeypatch.setattr(cli, "list_all_refs", boom)
+    assert main(["--repo", str(repo), "scan"]) == 4
+
+
+def test_history_failure_exits_incomplete(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    init_repo(repo)
+    commit_files(repo, {"README.md": "ok"}, "initial")
+
+    def boom(*args: object, **kwargs: object) -> None:
+        raise GitError(["log"], 128, "simulated failure")
+
+    monkeypatch.setattr(cli, "log_all_commit_trees", boom)
+    assert main(["--repo", str(repo), "scan", "--history"]) == 4
+
+
+def test_unwritable_report_exits_incomplete(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    init_repo(repo)
+    commit_files(repo, {"CON": "bad"}, "initial")
+    out = tmp_path / "missing-dir" / "out.json"
+
+    assert main(["--repo", str(repo), "scan", "--json", str(out)]) == 4
+
+
+def test_cp1252_stdout_does_not_crash(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    init_repo(repo)
+    commit_files(repo, {"файл/CON": "bad"}, "non-ascii parent")
+
+    buffer = io.BytesIO()
+    stream = io.TextIOWrapper(buffer, encoding="cp1252")
+    monkeypatch.setattr(sys, "stdout", stream)
+    result = main(["--repo", str(repo), "scan"])
+    stream.flush()
+
+    assert result == 1

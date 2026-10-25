@@ -1,6 +1,6 @@
 # PRODUCT — pathgate
 
-Status: SCAFFOLD (not built). Date: 2026-10-12.
+Status: v0.1 implemented and locally verified 2026-10-25; not published. Date: 2026-10-12, updated 2026-10-25.
 
 ## Problem
 

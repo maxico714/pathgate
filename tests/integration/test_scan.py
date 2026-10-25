@@ -147,6 +147,114 @@ def test_config_path_length_severity_only() -> None:
         assert main(["--repo", str(repo), "scan"]) == 0
 
 
+def test_invalid_severity_is_config_error() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = Path(tmp) / "repo"
+        repo.mkdir()
+        init_repo(repo)
+        commit_files(repo, {"CON": "content"}, "add reserved")
+        (repo / ".pathgate.yaml").write_text("rules:\n  RESERVED_NAME: fatal\n", encoding="utf-8")
+
+        assert main(["--repo", str(repo), "scan"]) == 2
+
+
+def test_malformed_config_is_config_error() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = Path(tmp) / "repo"
+        repo.mkdir()
+        init_repo(repo)
+        commit_files(repo, {"README.md": "ok"}, "initial")
+        (repo / ".pathgate.yaml").write_text("rules: [unclosed\n", encoding="utf-8")
+
+        assert main(["--repo", str(repo), "scan"]) == 2
+
+
+def test_non_mapping_rules_is_config_error() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = Path(tmp) / "repo"
+        repo.mkdir()
+        init_repo(repo)
+        commit_files(repo, {"README.md": "ok"}, "initial")
+        (repo / ".pathgate.yaml").write_text("rules: []\n", encoding="utf-8")
+
+        assert main(["--repo", str(repo), "scan"]) == 2
+
+
+def test_bool_or_string_max_is_config_error() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = Path(tmp) / "repo"
+        repo.mkdir()
+        init_repo(repo)
+        commit_files(repo, {"README.md": "ok"}, "initial")
+        for value in ("yes", '"300"', "0", "-5"):
+            (repo / ".pathgate.yaml").write_text(
+                f"rules:\n  PATH_LENGTH:\n    max: {value}\n", encoding="utf-8"
+            )
+            assert main(["--repo", str(repo), "scan"]) == 2, value
+
+
+def test_uppercase_severity_accepted() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = Path(tmp) / "repo"
+        repo.mkdir()
+        init_repo(repo)
+        commit_files(repo, {"CON": "content"}, "add reserved")
+        (repo / ".pathgate.yaml").write_text("rules:\n  RESERVED_NAME: WARN\n", encoding="utf-8")
+
+        assert main(["--repo", str(repo), "scan"]) == 0
+
+
+def test_baseline_accepts_json_report() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = Path(tmp) / "repo"
+        repo.mkdir()
+        init_repo(repo)
+        commit_files(repo, {"CON": "content"}, "add reserved")
+        report = Path(tmp) / "report.json"
+
+        assert main(["--repo", str(repo), "scan", "--json", str(report)]) == 1
+        assert main(["--repo", str(repo), "scan", "--baseline", str(report)]) == 0
+
+
+def test_sarif_encodes_artifact_uri() -> None:
+    finding = Finding(
+        path="a b#c?.txt",
+        rule=RuleId.ILLEGAL_CHAR,
+        severity=Severity.ERROR,
+        refs=("refs/heads/main",),
+    )
+    result = ScanResult(findings=(finding,), scanned_refs=1, scanned_paths=1, elapsed_ms=1)
+    data = json.loads(render_sarif(result))
+    uri = data["runs"][0]["results"][0]["locations"][0]["physicalLocation"]["artifactLocation"][
+        "uri"
+    ]
+    assert uri == "a%20b%23c%3F.txt"
+    assert "informationUri" not in data["runs"][0]["tool"]["driver"]
+
+
+def test_sarif_uses_valid_levels_and_config() -> None:
+    result = ScanResult(findings=(), scanned_refs=0, scanned_paths=0, elapsed_ms=1)
+    default = json.loads(render_sarif(result))
+    rules = {r["id"]: r for r in default["runs"][0]["tool"]["driver"]["rules"]}
+    assert rules["PATH_LENGTH"]["defaultConfiguration"]["level"] == "warning"
+    assert rules["RESERVED_NAME"]["defaultConfiguration"]["level"] == "error"
+
+    configured = json.loads(
+        render_sarif(
+            result,
+            config={
+                "rules": {
+                    "PATH_LENGTH": "error",
+                    "RESERVED_NAME": "info",
+                }
+            },
+        )
+    )
+    rules = {r["id"]: r for r in configured["runs"][0]["tool"]["driver"]["rules"]}
+    assert rules["PATH_LENGTH"]["defaultConfiguration"]["level"] == "error"
+    assert rules["RESERVED_NAME"]["defaultConfiguration"]["level"] == "note"
+
+
 def test_malformed_baseline_warns_and_scans() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         repo = Path(tmp) / "repo"

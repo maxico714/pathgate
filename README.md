@@ -80,16 +80,17 @@ pathgate --repo ../some-repo scan --json report.json --sarif report.sarif
 |---|---|
 | `0` | Scan completed; no `error`-severity findings (warnings and infos do not fail the run) |
 | `1` | At least one `error`-severity finding |
-| `2` | Usage error (argparse) |
+| `2` | Usage or configuration error (argparse, invalid or unreadable config) |
 | `3` | Target path is not a git repository |
+| `4` | Scan incomplete: a ref/tree read or a report write failed |
 
 ## Rules
 
 | Rule | Default | What it matches |
 |---|---|---|
-| `RESERVED_NAME` | error | Basename (case-insensitive, extension stripped) is `CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`, `LPT1`–`LPT9` |
+| `RESERVED_NAME` | error | Any path component (case-insensitive, extension stripped) is `CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`, `LPT1`–`LPT9` |
 | `ILLEGAL_CHAR` | error | Any Windows-illegal character (`:`, `*`, `?`, `"`, `<`, `>`, or the pipe) anywhere in the path |
-| `TRAILING_DOT_SPACE` | error | Path ends with `.` or a space |
+| `TRAILING_DOT_SPACE` | error | Any path component ends with `.` or a space |
 | `PATH_LENGTH` | warn | Path longer than `max` characters (default 260) |
 
 ## Configuration
@@ -107,7 +108,7 @@ rules:
 baseline: .pathgate-baseline.json
 ```
 
-Set a rule to `error`, `warn` or `info`. `PATH_LENGTH` accepts either a bare severity (`PATH_LENGTH: info`) or a mapping with `severity` and `max` as above. Invalid YAML falls back to defaults.
+Set a rule to `error`, `warn` or `info` (case-insensitive). `PATH_LENGTH` accepts either a bare severity (`PATH_LENGTH: info`) or a mapping with `severity` and `max` as above. Invalid severities, a non-mapping `rules` value, unreadable YAML, and a `max` that is not a positive integer stop the run with exit code 2 and an explanatory message.
 
 ## Baseline
 
@@ -120,7 +121,7 @@ Suppress findings that already exist in a repository so CI only fails on new one
 ]
 ```
 
-An unreadable baseline prints a warning and is ignored; the scan still runs.
+The file can be either a plain array as shown above or a previous `pathgate scan --json` report (its `findings` array is used). An unreadable baseline prints a warning and is ignored; the scan still runs.
 
 ## Report-only guarantee
 
@@ -130,13 +131,15 @@ An unreadable baseline prints a warning and is ignored; the scan still runs.
 
 | Check | Result |
 |---|---|
-| Test suite | `pytest -q` → **46 passed** |
+| Test suite | `pytest -q` → **59 passed** |
 | Lint / format | `ruff check src tests` and `ruff format --check src tests` clean |
 | Types | `mypy src` → no issues (strict) |
-| Mutation check | Disabling reserved-name matching made 2 tests fail; restored, 10 unit tests pass |
-| Packaging | Wheel built: `pathgate-0.1.0-py3-none-any.whl`, 11,690 bytes, SHA-256 `56af677412e90c7fe959b7db20d9aaab7feaf7843916217d4503da89731058bf` |
-| Clean install | Fresh venv + wheel install; CLI scanned a fixture repo, reported both findings, wrote JSON and SARIF 2.1.0 |
-| Read-only | Fixture HEAD and `git status --porcelain` unchanged after the scan |
+| Mutation checks | Disabling reserved-name matching failed 2 tests; limiting the rule to the last path component failed 1 test; restored and re-ran green |
+| Packaging | Wheel built: `pathgate-0.1.0-py3-none-any.whl`, 15,011 bytes, SHA-256 `e4fa7861c373310443fda5e420aee810eab500425ac9fe1b5ec044eab50809f0` |
+| Clean install | Fresh venv + wheel install; `--history` scan of a fixture found a reserved directory (`CON/readme.txt`) and a trailing-dot directory (`dir./file.txt`), wrote JSON and SARIF 2.1.0 |
+| SARIF | Rule levels use `error`/`warning`/`note`; artifact URIs are percent-encoded; no placeholder URIs |
+| Failure paths | Failed ref/tree reads and unwritable reports exit 4; invalid config exits 2; a repo whose refs fail is never reported as clean |
+| Read-only | Fixture HEAD unchanged after the scan |
 
 Not yet verified: behavior on Python 3.10/3.11, performance of `--history` on very large repositories, SARIF schema validation against the official JSON schema, and a scan of a large real-world repository.
 

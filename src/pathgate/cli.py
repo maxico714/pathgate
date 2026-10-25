@@ -15,19 +15,26 @@ from .refs import (
     get_git_version,
     is_git_repo,
     list_all_refs,
+    log_all_commit_trees,
     ls_tree_recursive_full,
-    rev_list_all,
 )
 from .report import Finding, ScanResult, Summary, render_human, render_json, render_sarif
 from .rules import DEFAULT_RULES, RuleId, check_all
-from .severity import Severity, load_config, resolve_severity
+from .severity import (
+    ConfigError,
+    Severity,
+    load_config,
+    resolve_max_path,
+    resolve_severity,
+)
 
-_PATH_LENGTH_RULE = next(r for r in DEFAULT_RULES if r.id is RuleId.PATH_LENGTH)
 
-
-def _max_path_len(config: dict[str, Any]) -> int:
-    raw = resolve_severity(_PATH_LENGTH_RULE, config).params.get("max", 260)
-    return raw if isinstance(raw, int) and raw > 0 else 260
+def _configure_console() -> None:
+    """Avoid UnicodeEncodeError when stdout is redirected to a legacy codepage."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(errors="backslashreplace")
 
 
 def _scan_refs(
@@ -35,10 +42,11 @@ def _scan_refs(
     refs: list[Ref],
     config: dict[str, Any],
     baseline: set[tuple[str, str]],
-) -> tuple[list[Finding], set[str]]:
+) -> tuple[list[Finding], set[str], int]:
     findings_map: dict[tuple[str, RuleId], Finding] = {}
     seen_paths: set[str] = set()
-    max_len = _max_path_len(config)
+    failures = 0
+    max_len = resolve_max_path(config)
     for ref in refs:
         try:
             for entry in ls_tree_recursive_full(repo, ref.oid):
@@ -62,29 +70,24 @@ def _scan_refs(
                         detail=f"Found in ref {ref.name}",
                     )
         except GitError as e:
-            # Continue on individual ref errors, warn in detail
+            failures += 1
             print(f"warning: failed to scan ref {ref.name}: {e}", file=sys.stderr)
-    return list(findings_map.values()), seen_paths
+    return list(findings_map.values()), seen_paths, failures
 
 
 def _scan_history(
     repo: Path, config: dict[str, Any], baseline: set[tuple[str, str]]
-) -> tuple[list[Finding], set[str]]:
-    from .refs import get_tree_oid_for_commit
-
+) -> tuple[list[Finding], set[str], int]:
     findings_map: dict[tuple[str, RuleId], Finding] = {}
     seen_trees: set[str] = set()
     seen_paths: set[str] = set()
-    max_len = _max_path_len(config)
-    commits = rev_list_all(repo)
-    for commit_oid in commits:
-        try:
-            tree_oid = get_tree_oid_for_commit(repo, commit_oid)
-        except GitError:
-            continue
+    failures = 0
+    max_len = resolve_max_path(config)
+    for commit_oid, tree_oid in log_all_commit_trees(repo):
         if tree_oid in seen_trees:
             continue
         seen_trees.add(tree_oid)
+        short = commit_oid[:8]
         try:
             for entry in ls_tree_recursive_full(repo, tree_oid):
                 path = entry.path
@@ -97,7 +100,6 @@ def _scan_history(
                         continue
                     rule_cfg = resolve_severity(rule, config)
                     key = (path, rule.id)
-                    short = commit_oid[:8]
                     ref_label = f"commit:{short}"
                     existing = findings_map.get(key)
                     new_refs = (ref_label,) if not existing else existing.refs + (ref_label,)
@@ -109,8 +111,9 @@ def _scan_history(
                         detail=f"Found in commit {short}",
                     )
         except GitError as e:
-            print(f"warning: failed to scan commit {commit_oid[:8]}: {e}", file=sys.stderr)
-    return list(findings_map.values()), seen_paths
+            failures += 1
+            print(f"warning: failed to scan tree {tree_oid[:8]}: {e}", file=sys.stderr)
+    return list(findings_map.values()), seen_paths, failures
 
 
 def _load_baseline(path: Path | None) -> set[tuple[str, str]]:
@@ -121,13 +124,34 @@ def _load_baseline(path: Path | None) -> set[tuple[str, str]]:
     try:
         with path.open("r", encoding="utf-8") as f:
             data = json.load(f)
-        return {(item["path"], item["rule"]) for item in data}
+        # Accept both a plain list and pathgate's own scan --json report.
+        items = data.get("findings") if isinstance(data, dict) else data
+        if not isinstance(items, list):
+            raise ValueError("expected a list of findings")
+        entries: set[tuple[str, str]] = set()
+        for item in items:
+            if not isinstance(item, dict):
+                raise ValueError("baseline entries must be objects")
+            entry_path = item["path"]
+            entry_rule = item["rule"]
+            if not isinstance(entry_path, str) or not isinstance(entry_rule, str):
+                raise ValueError("baseline path and rule must be strings")
+            entries.add((entry_path, entry_rule))
+        return entries
     except (OSError, ValueError, TypeError, KeyError) as e:
         print(f"warning: ignoring unreadable baseline {path}: {e}", file=sys.stderr)
         return set()
 
 
+def _print_rules(config: dict[str, Any]) -> None:
+    print("pathgate rules (v1):")
+    for rule in DEFAULT_RULES:
+        severity = resolve_severity(rule, config).severity.value
+        print(f"  {rule.id.value:24} {severity:5}  {rule.name}")
+
+
 def main(argv: Sequence[str] | None = None) -> int:
+    _configure_console()
     parser = argparse.ArgumentParser(
         prog="pathgate",
         description=(
@@ -172,7 +196,14 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     repo = args.repo.resolve()
     config_path = args.config or (repo / ".pathgate.yaml")
-    config = load_config(config_path)
+    try:
+        config = load_config(config_path)
+        for rule in DEFAULT_RULES:
+            resolve_severity(rule, config)
+        resolve_max_path(config)
+    except ConfigError as err:
+        print(f"error: {err}", file=sys.stderr)
+        return 2
     effective_config_path = config_path if config_path.exists() else None
     baseline_path = args.baseline
     if baseline_path is None and config.get("baseline"):
@@ -180,14 +211,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     baseline = _load_baseline(baseline_path)
 
     if args.command == "rules":
-        print("pathgate rules (v1):")
-        for rule in DEFAULT_RULES:
-            rule_cfg = config.get("rules", {}).get(rule.id.value, rule.default_severity)
-            if isinstance(rule_cfg, dict):
-                sev = rule_cfg.get("severity", rule.default_severity)
-            else:
-                sev = rule_cfg
-            print(f"  {rule.id.value:24} {sev:5}  {rule.name}")
+        _print_rules(config)
         return 0
 
     if args.command == "doctor":
@@ -195,7 +219,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         if not is_git_repo(repo):
             print(f"error: {repo} is not a git repository", file=sys.stderr)
             return 3
-        refs = list_all_refs(repo)
+        try:
+            refs = list_all_refs(repo)
+        except GitError as err:
+            print(f"error: cannot list refs: {err}", file=sys.stderr)
+            return 4
         print(f"repo: {repo}")
         print(f"refs: {len(refs)}")
         print("doctor: ready")
@@ -207,23 +235,27 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 3
 
         if args.dry_run:
-            print("pathgate rules (v1):")
-            for rule in DEFAULT_RULES:
-                rule_cfg = config.get("rules", {}).get(rule.id.value, rule.default_severity)
-                if isinstance(rule_cfg, dict):
-                    sev = rule_cfg.get("severity", rule.default_severity)
-                else:
-                    sev = rule_cfg
-                print(f"  {rule.id.value:24} {sev:5}  {rule.name}")
+            _print_rules(config)
             return 0
 
         start = time.perf_counter()
-        refs = list_all_refs(repo)
-        findings, scanned_paths = _scan_refs(repo, refs, config, baseline)
+        try:
+            refs = list_all_refs(repo)
+        except GitError as err:
+            print(f"error: cannot list refs: {err}", file=sys.stderr)
+            return 4
+        findings, scanned_paths, failures = _scan_refs(repo, refs, config, baseline)
         scanned_refs = len(refs)
 
         if args.history:
-            history_findings, history_paths = _scan_history(repo, config, baseline)
+            try:
+                history_findings, history_paths, history_failures = _scan_history(
+                    repo, config, baseline
+                )
+            except GitError as err:
+                print(f"error: cannot read history: {err}", file=sys.stderr)
+                return 4
+            failures += history_failures
             scanned_paths |= history_paths
             existing = {(f.path, f.rule): f for f in findings}
             for hf in history_findings:
@@ -251,12 +283,25 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         # Output
         print(render_human(result, effective_config_path))
-        if args.json:
-            args.json.write_text(render_json(result, effective_config_path), encoding="utf-8")
-            print(f"JSON report: {args.json}", file=sys.stderr)
-        if args.sarif:
-            args.sarif.write_text(render_sarif(result, effective_config_path), encoding="utf-8")
-            print(f"SARIF report: {args.sarif}", file=sys.stderr)
+        try:
+            if args.json:
+                args.json.write_text(render_json(result, effective_config_path), encoding="utf-8")
+                print(f"JSON report: {args.json}", file=sys.stderr)
+            if args.sarif:
+                args.sarif.write_text(
+                    render_sarif(result, effective_config_path, config), encoding="utf-8"
+                )
+                print(f"SARIF report: {args.sarif}", file=sys.stderr)
+        except OSError as err:
+            print(f"error: cannot write report: {err}", file=sys.stderr)
+            return 4
+
+        if failures:
+            print(
+                f"error: {failures} read(s) failed; results are incomplete",
+                file=sys.stderr,
+            )
+            return 4
 
         return Summary(
             errors=sum(1 for f in findings if f.severity == Severity.ERROR),

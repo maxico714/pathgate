@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
+from urllib.parse import quote
 
 from .rules import DEFAULT_RULES, RuleId
-from .severity import Severity
+from .severity import Severity, resolve_severity
 
 
 @dataclass(frozen=True)
@@ -105,36 +107,51 @@ def render_json(result: ScanResult, config_path: Path | None = None) -> str:
     return json.dumps(payload, indent=2)
 
 
-def render_sarif(result: ScanResult, config_path: Path | None = None) -> str:
+_SARIF_LEVEL = {"error": "error", "warn": "warning", "info": "note"}
+
+
+def _sarif_level(severity: Severity) -> str:
+    return _SARIF_LEVEL[severity.value]
+
+
+def render_sarif(
+    result: ScanResult,
+    config_path: Path | None = None,
+    config: dict[str, Any] | None = None,
+) -> str:
+    rules = []
+    for rule in DEFAULT_RULES:
+        severity = (
+            resolve_severity(rule, config).severity
+            if config is not None
+            else Severity(rule.default_severity)
+        )
+        rules.append(
+            {
+                "id": rule.id.value,
+                "name": rule.name,
+                "shortDescription": {"text": rule.description},
+                "defaultConfiguration": {"level": _sarif_level(severity)},
+            }
+        )
     runs = [
         {
             "tool": {
                 "driver": {
                     "name": "pathgate",
                     "version": "0.1.0",
-                    "informationUri": "https://github.com/<owner>/pathgate",
-                    "rules": [
-                        {
-                            "id": rule.id.value,
-                            "name": rule.name,
-                            "shortDescription": {"text": rule.description},
-                            "defaultConfiguration": {"level": rule.default_severity},
-                        }
-                        for rule in DEFAULT_RULES
-                    ],
+                    "rules": rules,
                 }
             },
             "results": [
                 {
                     "ruleId": f.rule.value,
-                    "level": {"error": "error", "warn": "warning", "info": "note"}[
-                        f.severity.value
-                    ],
+                    "level": _sarif_level(f.severity),
                     "message": {"text": f.path},
                     "locations": [
                         {
                             "physicalLocation": {
-                                "artifactLocation": {"uri": f.path},
+                                "artifactLocation": {"uri": quote(f.path, safe="/")},
                             }
                         }
                     ],

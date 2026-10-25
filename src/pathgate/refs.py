@@ -94,16 +94,15 @@ def ls_tree_recursive_full(repo: Path, tree_ish: str) -> Iterator[TreeEntry]:
             yield TreeEntry(path=path, mode=mode, oid=oid)
 
 
-def rev_list_all(repo: Path) -> list[str]:
-    """Return all commit OIDs in history (rev-list --all)."""
-    out = _run_git(repo, ["rev-list", "--all"])
-    return [line.strip() for line in out.splitlines() if line.strip()]
-
-
-def get_tree_oid_for_commit(repo: Path, commit_oid: str) -> str:
-    """Get the tree OID for a commit."""
-    out = _run_git(repo, ["rev-parse", f"{commit_oid}^{{tree}}"])
-    return out.strip()
+def log_all_commit_trees(repo: Path) -> list[tuple[str, str]]:
+    """Return (commit, tree) pairs for every commit reachable from any ref."""
+    out = _run_git(repo, ["log", "--all", "--format=%H %T"])
+    pairs: list[tuple[str, str]] = []
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) == 2:
+            pairs.append((parts[0], parts[1]))
+    return pairs
 
 
 def is_git_repo(path: Path) -> bool:

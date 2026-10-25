@@ -1,6 +1,6 @@
 # BUILD CHECKLIST — pathgate
 
-Status: SCAFFOLD. Work top-to-bottom; each gate shows REAL command output. Circuit breaker: 3 failures per gate → stop, re-research, log in STATE.md.
+Status: v0.1 locally verified 2026-10-25 (59 tests, ruff/mypy clean, wheel installs in a fresh venv). Gates 1–3, 6.1–6.3, 7.1 and 8.1 are done; remaining boxes are open. G2 (public push) and G3 (publish) were not executed. Work top-to-bottom; each gate shows REAL command output. Circuit breaker: 3 failures per gate → stop, re-research, log in STATE.md.
 
 ## Gate 0 — Perf spike (riskiest assumption FIRST) — **PARTIALLY DONE 2026-10-12**
 
@@ -16,51 +16,52 @@ Spike results (synthetic repo: 200 files, 10 commits, PowerShell subprocess per 
 
 ## Gate 1 — L0 static (every commit)
 
-- [ ] `ruff check .` + `ruff format --check .` clean.
-- [ ] `mypy src/` clean.
-- [ ] `pytest --collect-only -q` green.
+- [x] `ruff check .` + `ruff format --check .` clean.
+- [x] `mypy src/` clean.
+- [x] `pytest --collect-only -q` green.
 
 ## Gate 2 — L1 units (rules)
 
-- [ ] Reserved name matcher: `CON`, `con.txt`, `COM1`, `LPT9` → hit; `console.txt` → miss.
-- [ ] Illegal char matcher: each of `: * ? " < > |` → hit; safe chars → miss.
-- [ ] Trailing dot/space matcher.
-- [ ] Path length matcher (threshold configurable).
-- [ ] **Mutation sanity:** flip case-insensitive off for reserved names → `con.txt` test MUST fail; restore.
+- [x] Reserved name matcher: `CON`, `con.txt`, `COM1`, `LPT9`, `CON/readme.txt` → hit; `console.txt`, `conman/` → miss.
+- [x] Illegal char matcher: each of `: * ? " < > |` → hit; safe chars → miss.
+- [x] Trailing dot/space matcher (final and intermediate components).
+- [x] Path length matcher (threshold configurable; invalid values rejected).
+- [x] **Mutation sanity:** limiting the reserved-name check to the last component fails `test_reserved_name_hits`; restored.
 
 ## Gate 3 — L2 integration (fixture repos)
 
-- [ ] Fixture bare git repo with hostile paths across multiple refs → correct findings; refs listed per finding.
-- [ ] Baseline file suppresses known-existing; new finding still reported.
-- [ ] Config-aware severity: rule set to `info` → exit 0; set to `error` → exit 1.
+- [x] Fixture git repo with hostile paths across multiple refs → correct findings; refs listed per finding.
+- [x] Baseline file suppresses known-existing (plain list and `--json` report formats).
+- [x] Config-aware severity: rule set to `warn` → exit 0; set to `error` → exit 1; invalid config → exit 2.
 
 ## Gate 4 — L3 e2e (live)
 
-- [ ] Live audit of real repo on host (p2/p1 or clone) → correct findings; SARIF valid (validate against SARIF 2.1.0 schema or GitHub code-scanning).
-- [ ] `--dry-run` lists rules without scanning.
+- [ ] Live audit of a large real repo on host → correct findings; SARIF validated against the SARIF 2.1.0 schema or GitHub code-scanning. (Fixture audit passes; schema validation not run.)
+- [x] `--dry-run` lists rules without scanning.
 
 ## Gate 5 — L5 adversarial
 
-- [ ] Empty repo → clean exit 0.
-- [ ] Non-git dir → clean `E_GIT` (exit 3).
-- [ ] Huge repo → progress + bounded memory (stream, not buffer).
-- [ ] Invalid UTF-8 path → surrogateescape, no crash.
+- [x] Empty repo → clean exit 0.
+- [x] Non-git dir → clean `E_GIT` (exit 3).
+- [ ] Huge repo (100k+ commits) → bounded memory. (Only a 500-file synthetic smoke and a small `--history` fixture were run.)
+- [ ] Invalid UTF-8 path bytes → surrogateescape, no crash. (Non-ASCII paths and cp1252 stdout are tested; raw invalid bytes are not.)
 
 ## Gate 6 — Report-only & honesty audit (pre-M8)
 
-- [ ] CI test: zero writes to git objects / working tree (no `write-tree`, no `update-ref`, no file writes outside temp).
-- [ ] README states report-only; no rewrite claims; non-goals explicit.
-- [ ] No TODO/FIXME in src/.
-- [ ] Secrets scan clean.
+- [x] Test: zero writes to the audited repository during a scan (HEAD and `git status` unchanged; no write commands in source).
+- [x] README states report-only; no rewrite claims; non-goals explicit.
+- [x] No TODO/FIXME in src/.
+- [ ] Secrets scan clean. (Not run yet.)
 
 ## Gate 7 — L4 clean env
 
-- [ ] Fresh clone → `pip install -e .` → fixture tests green on clean machine profile.
-- [ ] README quickstart verbatim-tested.
+- [x] Fresh venv → wheel install → CLI scan of a fixture repo green (`--history`, JSON + SARIF written).
+- [ ] README quickstart verbatim-tested from a fresh clone.
 
 ## Gate 8 — Packaging (G3-gated; do NOT run without operator approval)
 
-- [ ] `python -m build` → wheel + sdist; `twine check` clean.
+- [x] Wheel built locally (`pip wheel`, `--no-build-isolation`); `pathgate-0.1.0-py3-none-any.whl`.
+- [ ] sdist + `twine check` clean.
 - [ ] Name free on PyPI confirmed live (re-check `pathgate`).
 - [ ] Publish ONLY at G3 with trusted publishing (OIDC), after G2 checklist.
 

@@ -5,11 +5,11 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from pathlib import PurePath
+from pathlib import PurePosixPath
 from re import Pattern
 
 # Windows reserved names (case-insensitive)
-_RESERVED_BASENAMES = frozenset(
+_RESERVED_NAMES = frozenset(
     {
         "CON",
         "PRN",
@@ -49,7 +49,7 @@ DEFAULT_RULES: tuple[Rule, ...] = (
         name="Windows reserved name",
         default_severity="error",
         description=(
-            "Path basename (case-insensitive) matches a Windows reserved device name "
+            "Any path component (case-insensitive) matches a Windows reserved device name "
             "(CON, PRN, AUX, NUL, COM1–9, LPT1–9) with or without extension."
         ),
     ),
@@ -63,7 +63,7 @@ DEFAULT_RULES: tuple[Rule, ...] = (
         id=RuleId.TRAILING_DOT_SPACE,
         name="Trailing dot or space",
         default_severity="error",
-        description="Path ends with a dot (.) or space ( ), which Windows rejects.",
+        description=("A path component ends with a dot (.) or space ( ), which Windows rejects."),
     ),
     Rule(
         id=RuleId.PATH_LENGTH,
@@ -74,12 +74,18 @@ DEFAULT_RULES: tuple[Rule, ...] = (
 )
 
 
+def _path_components(path: str) -> tuple[str, ...]:
+    """Split a git path into components; git paths use forward slashes."""
+    return PurePosixPath(path).parts
+
+
 def check_reserved_name(path: str) -> bool:
-    """Return True if the path's basename matches a Windows reserved name."""
-    basename = PurePath(path).name
-    # Split on first dot to handle extensions like CON.txt
-    name_part = basename.split(".", 1)[0].upper()
-    return name_part in _RESERVED_BASENAMES
+    """Return True if any path component matches a Windows reserved name."""
+    for component in _path_components(path):
+        # Split on the first dot to handle extensions like CON.txt
+        if component.split(".", 1)[0].upper() in _RESERVED_NAMES:
+            return True
+    return False
 
 
 def check_illegal_char(path: str) -> bool:
@@ -88,8 +94,8 @@ def check_illegal_char(path: str) -> bool:
 
 
 def check_trailing_dot_space(path: str) -> bool:
-    """Return True if the path ends with a dot or space."""
-    return bool(_TRAILING_DOT_SPACE_RE.search(path))
+    """Return True if any path component ends with a dot or space."""
+    return any(_TRAILING_DOT_SPACE_RE.search(part) for part in _path_components(path))
 
 
 def check_path_length(path: str, max_len: int = 260) -> bool:

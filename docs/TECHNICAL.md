@@ -1,13 +1,13 @@
 # TECHNICAL — pathgate
 
-Status: SCAFFOLD (not built). Date: 2026-10-12. Stack: Python 3.12 + `git` CLI (read-only plumbing); no paid deps; report-only.
+Status: v0.1 implemented and locally verified 2026-10-25 (see README verification table). Date: 2026-10-12, updated 2026-10-25. Stack: Python 3.10+ + `git` CLI (read-only plumbing); one runtime dependency (PyYAML); report-only.
 
 ## Architecture (C4-lite)
 
 ```
 [git repo] → Ref enumerator (for-each-ref)
                     ↓
-          Tree walker (ls-tree -r per ref; --history: rev-list --all + tree-OID dedup)
+          Tree walker (ls-tree -r per ref; --history: git log --all --format + tree-OID dedup)
                     ↓
           Rule engine (reserved | illegal-char | trailing | length)
                     ↓
@@ -24,17 +24,17 @@ Single Python package `pathgate` (CLI). No services. No DB. **Report-only — ne
 
 | Rule id | Check | Default severity |
 |---|---|---|
-| `RESERVED_NAME` | basename (case-insensitive) in {CON, PRN, AUX, NUL, COM1–9, LPT1–9} (with/without extension) | error |
+| `RESERVED_NAME` | any path component (case-insensitive) in {CON, PRN, AUX, NUL, COM1–9, LPT1–9} (with/without extension) | error |
 | `ILLEGAL_CHAR` | any of `: * ? " < > |` in path | error |
-| `TRAILING_DOT_SPACE` | path ends with `.` or ` ` | error |
-| `PATH_LENGTH` | path length > 260 | warn (config: error at >config) |
+| `TRAILING_DOT_SPACE` | any path component ends with `.` or ` ` | error |
+| `PATH_LENGTH` | path length > 260 | warn (configurable max) |
 
-Defaults documented in docs/RULES.md; config overrides per-repo.
+Defaults are defined in `rules.py` and shown in the README; config overrides per repository.
 
 ## Audit modes
 
 - **All-refs-tips-first (v0.1 default):** `git for-each-ref --format='%(refname)'` → for each ref, `git ls-tree -r --name-only <ref>`; aggregate findings (dedup by path + rule).
-- **History opt-in (`--history`):** `git rev-list --all` → for each commit, `git ls-tree -r --name-only <commit>` with **tree-OID dedup** (skip trees already seen) + progress bar. Perf budget [UNKNOWN] — Gate 0 spike measures on a real repo.
+- **History opt-in (`--history`):** one `git log --all --format='%H %T'` call → deduplicate tree OIDs → one `git ls-tree -r` per unique tree. No progress bar; wall time on very large repositories is unmeasured.
 
 ## Config
 
@@ -48,14 +48,14 @@ rules:
 baseline: .pathgate-baseline     # optional: suppress known-existing
 ```
 
-Baseline = JSON list of `{path, rule}`; new findings only reported.
+Baseline = JSON list of `{path, rule}`, or a previous `scan --json` report; new findings only reported.
 
 ## Interfaces
 
 - CLI: `pathgate scan [--history] [--config c.yaml] [--json out.json] [--sarif out.sarif] [--baseline b.json]`; `pathgate rules list`; `pathgate doctor`.
 - JSON schema: `{findings: [{path, rule, severity, refs: [...]}], summary: {errors, warnings, infos}}`.
 - SARIF 2.1.0 output (GitHub code-scanning compatible).
-- Exit codes: 0 ok / no error-severity; 1 error findings; 2 config error; 3 git error (not a repo); 4 environment (git missing).
+- Exit codes: 0 ok / no error-severity; 1 error findings; 2 usage or config error; 3 not a git repository; 4 scan incomplete (failed ref/tree read or report write).
 
 ## Data model
 
@@ -63,14 +63,14 @@ No persistence beyond report files + optional baseline JSON.
 
 ## Threat model (STRIDE-lite)
 
-- **Read-only is the security model**: only `git` plumbing read commands (`for-each-ref`, `ls-tree`, `rev-list`, `cat-file` as needed); no `write-tree`, no `update-ref`, no working-tree writes. CI test asserts no git-mutating commands.
+- **Read-only is the security model**: only `git` read commands (`for-each-ref`, `rev-parse --git-dir`, `ls-tree`, `log`); no `write-tree`, no `update-ref`, no working-tree writes. Tests assert the read-only intent.
 - Repo is untrusted input: huge trees, deep nesting, weird encodings → bounded memory (stream ls-tree output), clean errors.
 - Path encodings: git stores paths as bytes; decode with surrogateescape; never crash on invalid UTF-8.
 - Supply chain: stdlib-first; git CLI is system dependency (documented minimum version).
 
 ## Error model
 
-Structured (rule-id style): `E_CONFIG`, `E_GIT`, `E_ENV`, `E_ENCODING`. Partial scan (one ref fails) = continue + warn, non-zero exit if any error-severity found.
+Structured (rule-id style): `E_CONFIG`, `E_GIT`, `E_ENV`, `E_ENCODING`. A failed ref or tree read is counted and the scan continues; the final exit code is 4 (incomplete) even when findings exist, so CI never treats partial data as clean. Invalid config stops the run with exit 2.
 
 ## Performance budget
 

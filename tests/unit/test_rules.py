@@ -24,6 +24,9 @@ def test_reserved_name_hits() -> None:
     assert check_reserved_name("PRN")
     assert check_reserved_name("AUX")
     assert check_reserved_name("NUL")
+    assert check_reserved_name("CON/readme.txt")
+    assert check_reserved_name("path/CON/file.txt")
+    assert check_reserved_name("aux/data.bin")
 
 
 def test_reserved_name_misses() -> None:
@@ -32,6 +35,8 @@ def test_reserved_name_misses() -> None:
     assert not check_reserved_name("COMMON")
     assert not check_reserved_name("content")
     assert not check_reserved_name("normal.txt")
+    assert not check_reserved_name("console/readme.txt")
+    assert not check_reserved_name("path/conman/file.txt")
 
 
 def test_illegal_char_hits() -> None:
@@ -53,12 +58,17 @@ def test_trailing_dot_space_hits() -> None:
     assert check_trailing_dot_space("path ")
     assert check_trailing_dot_space("dir/. ")
     assert check_trailing_dot_space("file. ")
+    assert check_trailing_dot_space("dir./file.txt")
+    assert check_trailing_dot_space("dir /file.txt")
+    assert check_trailing_dot_space("a/b./c")
 
 
 def test_trailing_dot_space_misses() -> None:
     assert not check_trailing_dot_space("path")
     assert not check_trailing_dot_space("path.txt")
     assert not check_trailing_dot_space("dir/file")
+    assert not check_trailing_dot_space("dir/.hidden/file")
+    assert not check_trailing_dot_space("a/b.c/d")
 
 
 def test_path_length_hits() -> None:
