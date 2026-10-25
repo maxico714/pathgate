@@ -1,0 +1,11 @@
+# .pathgate.yaml - default configuration for pathgate
+
+rules:
+  RESERVED_NAME: error
+  ILLEGAL_CHAR: error
+  TRAILING_DOT_SPACE: error
+  PATH_LENGTH:
+    severity: warn
+    max: 260
+
+# baseline: .pathgate-baseline.json  # optional: suppress known-existing findings
