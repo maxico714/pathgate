@@ -131,17 +131,19 @@ The file can be either a plain array as shown above or a previous `pathgate scan
 
 | Check | Result |
 |---|---|
-| Test suite | `pytest -q` → **59 passed** |
+| Test suite | `pytest -q` → **59 passed** on Python 3.12.10 and 3.14.5 |
 | Lint / format | `ruff check src tests` and `ruff format --check src tests` clean |
 | Types | `mypy src` → no issues (strict) |
 | Mutation checks | Disabling reserved-name matching failed 2 tests; limiting the rule to the last path component failed 1 test; restored and re-ran green |
-| Packaging | Wheel built: `pathgate-0.1.0-py3-none-any.whl`, 15,011 bytes, SHA-256 `e4fa7861c373310443fda5e420aee810eab500425ac9fe1b5ec044eab50809f0` |
+| Packaging | Wheel `pathgate-0.1.0-py3-none-any.whl` (15,011 bytes, SHA-256 `e4fa7861c373310443fda5e420aee810eab500425ac9fe1b5ec044eab50809f0`) and sdist built; `twine check` passed for both |
 | Clean install | Fresh venv + wheel install; `--history` scan of a fixture found a reserved directory (`CON/readme.txt`) and a trailing-dot directory (`dir./file.txt`), wrote JSON and SARIF 2.1.0 |
-| SARIF | Rule levels use `error`/`warning`/`note`; artifact URIs are percent-encoded; no placeholder URIs |
+| SARIF | Valid against the SARIF 2.1.0 JSON schema; levels use `error`/`warning`/`note`; artifact URIs are percent-encoded; no placeholder URIs |
 | Failure paths | Failed ref/tree reads and unwritable reports exit 4; invalid config exits 2; a repo whose refs fail is never reported as clean |
+| Secrets | `detect-secrets` on all tracked files → 0 findings (full git history not separately scanned) |
+| PyPI name | `pypi.org/pypi/pathgate/json` returned 404 on 2026-10-25 (no project registered at check time; re-check before publishing) |
 | Read-only | Fixture HEAD unchanged after the scan |
 
-Not yet verified: behavior on Python 3.10/3.11, performance of `--history` on very large repositories, SARIF schema validation against the official JSON schema, and a scan of a large real-world repository.
+Not yet verified: behavior on Python 3.10/3.11 (not installed locally), the CI workflow (added but never executed — there is no remote), performance of `--history` on very large repositories, and a scan of a large real-world repository.
 
 ## Limitations and non-goals
 

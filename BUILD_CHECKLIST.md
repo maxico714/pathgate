@@ -36,7 +36,8 @@ Spike results (synthetic repo: 200 files, 10 commits, PowerShell subprocess per 
 
 ## Gate 4 — L3 e2e (live)
 
-- [ ] Live audit of a large real repo on host → correct findings; SARIF validated against the SARIF 2.1.0 schema or GitHub code-scanning. (Fixture audit passes; schema validation not run.)
+- [ ] Live audit of a large real repo on host → correct findings. (Fixture audit passes.)
+- [x] SARIF output validated against the SARIF 2.1.0 JSON schema (`jsonschema`, 2026-10-25).
 - [x] `--dry-run` lists rules without scanning.
 
 ## Gate 5 — L5 adversarial
@@ -51,18 +52,18 @@ Spike results (synthetic repo: 200 files, 10 commits, PowerShell subprocess per 
 - [x] Test: zero writes to the audited repository during a scan (HEAD and `git status` unchanged; no write commands in source).
 - [x] README states report-only; no rewrite claims; non-goals explicit.
 - [x] No TODO/FIXME in src/.
-- [ ] Secrets scan clean. (Not run yet.)
+- [x] Secrets scan clean: `detect-secrets` on all tracked files → 0 findings. Full git history was not separately scanned.
 
 ## Gate 7 — L4 clean env
 
 - [x] Fresh venv → wheel install → CLI scan of a fixture repo green (`--history`, JSON + SARIF written).
-- [ ] README quickstart verbatim-tested from a fresh clone.
+- [x] README quickstart verbatim-tested from a fresh clone (2026-10-25): venv, `pip install .`, `pathgate scan` → exit 0.
 
 ## Gate 8 — Packaging (G3-gated; do NOT run without operator approval)
 
-- [x] Wheel built locally (`pip wheel`, `--no-build-isolation`); `pathgate-0.1.0-py3-none-any.whl`.
-- [ ] sdist + `twine check` clean.
-- [ ] Name free on PyPI confirmed live (re-check `pathgate`).
+- [x] Wheel built (`pip wheel` and `python -m build`).
+- [x] sdist built; `twine check` passed for wheel and sdist.
+- [x] PyPI lookup returned 404 on 2026-10-25 (name unregistered at check time; re-check before publishing).
 - [ ] Publish ONLY at G3 with trusted publishing (OIDC), after G2 checklist.
 
 ## Definition of done (v0.1)

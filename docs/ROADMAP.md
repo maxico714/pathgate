@@ -9,7 +9,8 @@ Status: v0.1 implemented and locally verified 2026-10-25; not published. SemVer;
 - [x] All-refs-tips audit (`for-each-ref` + `ls-tree -r`).
 - [x] Config-aware severity (YAML, validated); human + `--json` + `--sarif` reporters.
 - [x] Exit codes; `doctor`; README quickstart.
-- [ ] CI workflow and green matrix (no `.github/workflows` yet).
+- [x] CI workflow added (`.github/workflows/ci.yml`, pinned actions, Ubuntu + Windows, Python 3.10–3.13).
+- [ ] CI matrix observed green on GitHub (no remote yet, so the workflow has never run).
 
 **Riskiest assumption to spike first:** history-scan performance. Already in Gate 0.
 
@@ -17,13 +18,13 @@ Status: v0.1 implemented and locally verified 2026-10-25; not published. SemVer;
 
 - [x] History opt-in (`--history`) with tree-OID dedup (single `git log` call; no progress bar; large-repo performance still unmeasured).
 - [x] Baseline file (suppress known-existing; accepts a plain list or a `--json` report).
-- [ ] GitHub Action wrapper; SARIF validated against GitHub code-scanning schema.
+- [ ] GitHub Action wrapper; SARIF validated in GitHub code-scanning (the SARIF document itself validates against the 2.1.0 schema).
 
 ## v1.0 — Production-ready
 
 - [x] Configurable length threshold. Case-insensitive normalization option and PR diff mode remain open.
 - [x] L4 clean-environment verification (fresh venv + wheel). SBOM and signed releases (G3) remain open.
-- [ ] THIRD_PARTY_NOTICES; name free on PyPI confirmed.
+- [ ] THIRD_PARTY_NOTICES; PyPI name free (404 on 2026-10-25; re-check before publishing).
 
 ## Post-1.0 (parked)
 
