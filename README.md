@@ -135,7 +135,7 @@ The file can be either a plain array as shown above or a previous `pathgate scan
 | Lint / format | `ruff check src tests` and `ruff format --check src tests` clean |
 | Types | `mypy src` → no issues (strict) |
 | Mutation checks | Disabling reserved-name matching failed 2 tests; limiting the rule to the last path component failed 1 test; restored and re-ran green |
-| Packaging | Wheel `pathgate-0.1.0-py3-none-any.whl` (15,655 bytes, SHA-256 `82d07b9525a613f0132ba75a8b35f9cc24880726f76218d289afcad748b274c2`) and sdist built; `twine check` passed for both |
+| Packaging | Wheel `pathgate-0.1.0-py3-none-any.whl` and sdist built; `twine check` passed for both |
 | Clean install | Fresh venv + wheel install; `--history` scan of a fixture found a reserved directory (`CON/readme.txt`) and a trailing-dot directory (`dir./file.txt`), wrote JSON and SARIF 2.1.0 |
 | SARIF | Valid against the SARIF 2.1.0 JSON schema; levels use `error`/`warning`/`note`; artifact URIs are percent-encoded; no placeholder URIs |
 | Non-UTF-8 paths | Surrogateescaped git paths render in human/JSON output; SARIF percent-encodes the raw bytes without crashing |
