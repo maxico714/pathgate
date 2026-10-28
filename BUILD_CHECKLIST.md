@@ -1,6 +1,6 @@
 # BUILD CHECKLIST — pathgate
 
-Status: v0.1 locally verified 2026-10-25 (59 tests, ruff/mypy clean, wheel installs in a fresh venv). Gates 1–3, 6.1–6.3, 7.1 and 8.1 are done; remaining boxes are open. G2 (public push) and G3 (publish) were not executed. Work top-to-bottom; each gate shows REAL command output. Circuit breaker: 3 failures per gate → stop, re-research, log in STATE.md.
+Status: v0.1 locally verified 2026-10-25 (59 tests, ruff/mypy clean, wheel installs in a fresh venv; 2026-10-28 QA re-run 60 tests, including non-UTF-8 SARIF). Gates 1–3, 6.1–6.3, 7.1 and 8.1 are done; remaining boxes are open. G2 (public push) and G3 (publish) were not executed. Work top-to-bottom; each gate shows REAL command output. Circuit breaker: 3 failures per gate → stop, re-research, log in STATE.md.
 
 ## Gate 0 — Perf spike (riskiest assumption FIRST) — **PARTIALLY DONE 2026-10-12**
 

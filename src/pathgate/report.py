@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote_from_bytes
 
 from .rules import DEFAULT_RULES, RuleId
 from .severity import Severity, resolve_severity
@@ -151,7 +151,15 @@ def render_sarif(
                     "locations": [
                         {
                             "physicalLocation": {
-                                "artifactLocation": {"uri": quote(f.path, safe="/")},
+                                "artifactLocation": {
+                                    # utf-8/surrogateescape recovers the original
+                                    # bytes from a surrogateescaped git path, so
+                                    # invalid UTF-8 names stay percent-encoded
+                                    # instead of crashing.
+                                    "uri": quote_from_bytes(
+                                        f.path.encode("utf-8", "surrogateescape"), safe="/"
+                                    )
+                                },
                             }
                         }
                     ],

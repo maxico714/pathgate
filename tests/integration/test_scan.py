@@ -232,6 +232,22 @@ def test_sarif_encodes_artifact_uri() -> None:
     assert "informationUri" not in data["runs"][0]["tool"]["driver"]
 
 
+def test_sarif_handles_non_utf8_path() -> None:
+    """Surrogateescaped git paths must not crash SARIF rendering."""
+    finding = Finding(
+        path="bad\udcff:name.txt",
+        rule=RuleId.ILLEGAL_CHAR,
+        severity=Severity.ERROR,
+        refs=("refs/heads/main",),
+    )
+    result = ScanResult(findings=(finding,), scanned_refs=1, scanned_paths=1, elapsed_ms=1)
+    data = json.loads(render_sarif(result))
+    uri = data["runs"][0]["results"][0]["locations"][0]["physicalLocation"]["artifactLocation"][
+        "uri"
+    ]
+    assert uri == "bad%FF%3Aname.txt"
+
+
 def test_sarif_uses_valid_levels_and_config() -> None:
     result = ScanResult(findings=(), scanned_refs=0, scanned_paths=0, elapsed_ms=1)
     default = json.loads(render_sarif(result))

@@ -127,17 +127,18 @@ The file can be either a plain array as shown above or a previous `pathgate scan
 
 `pathgate` never rewrites history, never checks out files and never modifies the audited repository. It only reads git objects and writes the report files you explicitly request with `--json` / `--sarif`. Renaming or history rewriting is out of scope and would be a separate, human-gated tool.
 
-## Verification (2026-10-25, Windows 11, Python 3.12.10)
+## Verification (2026-10-25, Windows 11, Python 3.12.10; QA re-run 2026-10-28)
 
 | Check | Result |
 |---|---|
-| Test suite | `pytest -q` → **59 passed** on Python 3.12.10 and 3.14.5 |
+| Test suite | `pytest -q` → **60 passed** on Python 3.12.10 and 3.14.5 |
 | Lint / format | `ruff check src tests` and `ruff format --check src tests` clean |
 | Types | `mypy src` → no issues (strict) |
 | Mutation checks | Disabling reserved-name matching failed 2 tests; limiting the rule to the last path component failed 1 test; restored and re-ran green |
-| Packaging | Wheel `pathgate-0.1.0-py3-none-any.whl` (15,011 bytes, SHA-256 `e4fa7861c373310443fda5e420aee810eab500425ac9fe1b5ec044eab50809f0`) and sdist built; `twine check` passed for both |
+| Packaging | Wheel `pathgate-0.1.0-py3-none-any.whl` (15,655 bytes, SHA-256 `82d07b9525a613f0132ba75a8b35f9cc24880726f76218d289afcad748b274c2`) and sdist built; `twine check` passed for both |
 | Clean install | Fresh venv + wheel install; `--history` scan of a fixture found a reserved directory (`CON/readme.txt`) and a trailing-dot directory (`dir./file.txt`), wrote JSON and SARIF 2.1.0 |
 | SARIF | Valid against the SARIF 2.1.0 JSON schema; levels use `error`/`warning`/`note`; artifact URIs are percent-encoded; no placeholder URIs |
+| Non-UTF-8 paths | Surrogateescaped git paths render in human/JSON output; SARIF percent-encodes the raw bytes without crashing |
 | Failure paths | Failed ref/tree reads and unwritable reports exit 4; invalid config exits 2; a repo whose refs fail is never reported as clean |
 | Secrets | `detect-secrets` on all tracked files → 0 findings (full git history not separately scanned) |
 | PyPI name | `pypi.org/pypi/pathgate/json` returned 404 on 2026-10-25 (no project registered at check time; re-check before publishing) |
